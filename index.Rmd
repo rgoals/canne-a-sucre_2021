@@ -10,5 +10,21 @@ link-citations: yes
 description: "The output format for this example is bookdown::gitbook."
 ---
 
-# Prerequisites
+# Stage Sucrivoire Zuénoula
+
+
+
+
+## Les librairies
+
+```{r message = FALSE, warning = FALSE}
+library("ggpubr")    # ggboxplot()
+library("agricolae") # SNK.test() Student Newman-Keuls
+library("car")       # leveneTest()
+library("rstatix")   # convert_as_factor(), friedman_test()
+library("Rmisc")     # summarySE()
+library("corrplot")  # matrice de corrélation cor(), corrplot()
+#library("ggpmisc")   # stat_poly_eq() ajout équation
+library("tidyverse") # tidy et ggplot2
+```
 
