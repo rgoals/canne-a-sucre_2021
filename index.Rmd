@@ -21,10 +21,36 @@ description: "The output format for this example is bookdown::gitbook."
 library("ggpubr")    # ggboxplot()
 library("agricolae") # SNK.test() Student Newman-Keuls
 library("car")       # leveneTest()
-library("rstatix")   # convert_as_factor(), friedman_test()
 library("Rmisc")     # summarySE()
-library("corrplot")  # matrice de corrélation cor(), corrplot()
-#library("ggpmisc")   # stat_poly_eq() ajout équation
+library("rstatix")   # identify_outliers()
 library("tidyverse") # tidy et ggplot2
 ```
+
+How do we save our ANOVA test, in a situation where the homogeneity of variance assumption is violated ?
+
+welch_anova_test() [rstatix] : peut être utilisé lorsque l’hypothèse d’homogénéité de variance est violée (alors que normalité est respectée ? - vérifier), comme dans notre exemple.
+
+An alternative procedure (i.e.: Welch one-way test), that does not require that assumption have been implemented in the function `oneway.test()` or `welch_anova_test()`.
+
+ANOVA test with no assumption of equal variances
+
+```{r}
+oneway.test(weight ~ group, data = my_data)
+```
+
+Pairwise t-tests with no assumption of equal variances
+
+```{r}
+pairwise.t.test(my_data$weight, my_data$group, p.adjust.method = "BH", pool.sd = FALSE)
+```
+
+
+```{r}
+tab_mc <- (SNK.test(lm, "Engrais", group = TRUE))$groups %>% 
+  mutate(Engrais = rownames(.)) %>% 
+  select(Engrais, dPass, groups) %>% 
+  as_tibble()
+tab_mc
+```
+
 

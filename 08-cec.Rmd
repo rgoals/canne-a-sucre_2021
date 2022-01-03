@@ -1,0 +1,147 @@
+
+# CEC
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library("ggpubr")
+library("agricolae")
+library("car")
+library("rstatix")
+library("Rmisc")
+library("emmeans")
+library("multcomp")
+library("tidyverse")
+```
+
+## Les données
+
+```{r}
+df <- read_csv("data/dfasseu.csv")
+df <- df %>%
+  select(Bloc, Traitement, Engrais, dCEC) %>% 
+  mutate(id = 1:nrow(.), .before = 1)
+```
+
+```{r}
+Lv = c("700 kg/ha NPK", 
+       "400 kg/ha NPK + 600 kg/ha INT", 
+       "600 kg/ha NPK + 600 kg/ha INT", 
+       "300 kg/ha NPK + 1200 kg/ha INT", 
+       "400 kg/ha NPK + 1200 kg/ha INT", 
+       "600 kg/ha NPK + 1200 kg/ha INT")
+
+df <- df %>% 
+  mutate(Engrais = factor(Engrais, levels = Lv))
+```
+
+
+## Visualisation boxplots
+
+```{r cec-boxplot}
+bxp <- ggplot(df, aes(x = Engrais, y = dCEC)) +
+  geom_boxplot() + theme_bw() +
+  xlab("Traitement (combinaison d'engrais)") + ylab("Accroissement de la CEC") +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+bxp
+```
+
+
+## Détection des observations aberrantes extrêmes
+
+```{r}
+df_out <- df %>%
+  group_by(Engrais) %>%
+  identify_outliers(dCEC)
+df_out
+```
+
+
+```{r}
+#df <- df %>% filter(!id %in% c(1, 7, 23)) 
+#filter(! id %in% df_out$id)
+```
+
+
+## L'ANOVA
+
+### Le modèle
+
+```{r}
+lm <- glm(dCEC ~ Engrais, data = df)
+Anova(lm)
+```
+
+La p-value > 0.05 => pas de différence significative entre les effets des différents engrais sur la CEC.
+
+### Hypothèses de validité
+
+#### Indépendance des résidus
+
+```{r cec-residu}
+plot(lm, 1)
+```
+
+#### Normalité des résidus
+
+```{r cec-norm}
+plot(lm, 2)
+```
+
+```{r}
+shapiro_test(dCEC, data = df)
+```
+
+=> Distribution non normale
+
+#### Homogénéité des variances
+
+```{r cec-homvar}
+plot(lm, 3)
+```
+
+```{r}
+levene_test(residuals(lm) ~ Engrais, data = df)
+```
+
+Alternative Kruskal-Wallis
+
+```{r}
+lm_kw <- df %>% kruskal_test(dCEC ~ Engrais)
+lm_kw
+```
+
+=> Pas de différence significative
+
+### Comparaisons par paires
+
+Moyennes et écart-types et ajout de la colonne des groupes.
+
+```{r}
+pwc_lm = emmeans(lm, ~ Engrais)
+(cm_moy <- summarySE(df, measurevar = "dCEC", groupvars = "Engrais") %>% 
+   mutate(groups = cld(pwc_lm, alpha = 0.05, Letters = letters)$.group) %>% 
+   select(Engrais, dCEC, sd, groups))
+write_csv(cm_moy, "tab/csv_cec.csv")
+```
+
+Sous forme graphique ...
+
+```{r cec-barplot}
+ggplot(data = cm_moy, mapping = aes(x = Engrais, y = dCEC)) +
+  geom_bar(stat = "identity", color = "blue", fill = "grey", width = 0.5) +
+  geom_text(aes(label = groups), vjust = -0.5, size = 4) +
+  ylim(0, 3) +
+  xlab("Engrais") + ylab("Accroissement de la CEC") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+```
+
+
+
+
+
+
+
+
+
+
+

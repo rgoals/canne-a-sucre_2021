@@ -1,0 +1,145 @@
+
+# pH à l'eau
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library("ggpubr")
+library("agricolae")
+library("car")
+library("rstatix")
+library("Rmisc")
+library("multcomp")
+library("emmeans")
+library("tidyverse")
+```
+
+## Les données
+
+```{r}
+df <- read_csv("data/dfasseu.csv")
+df <- df %>%
+  select(Bloc, Traitement, Engrais, dpHeau) %>% 
+  mutate(id = 1:nrow(.), .before = 1)
+```
+
+```{r}
+Lv = c("700 kg/ha NPK", 
+       "400 kg/ha NPK + 600 kg/ha INT", 
+       "600 kg/ha NPK + 600 kg/ha INT", 
+       "300 kg/ha NPK + 1200 kg/ha INT", 
+       "400 kg/ha NPK + 1200 kg/ha INT", 
+       "600 kg/ha NPK + 1200 kg/ha INT")
+
+df <- df %>% 
+  mutate(Engrais = factor(Engrais, levels = Lv))
+```
+
+
+## Visualisation boxplots
+
+```{r pHo-boxplot}
+bxp <- ggplot(df, aes(x = Engrais, y = dpHeau)) + geom_boxplot() +
+  xlab("Traitement (combinaison d'engrais)") + ylab("Acroissement du pHeau") + theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+bxp
+```
+
+
+## Détection des observations aberrantes extrêmes
+
+```{r}
+df_out <- df %>%
+  group_by(Engrais) %>%
+  identify_outliers(dpHeau)
+df_out
+```
+
+=> Pas exclues
+
+```{r}
+#df <- df %>% filter(! id %in% c(...)) 
+#df <- df %>% filter(! id %in% df_out$id)
+```
+
+
+## L'ANOVA
+
+### Le modèle
+
+```{r}
+lm <- glm(dpHeau ~ Engrais, data = df)
+Anova(lm)
+```
+
+La p-value > 0.05 => pas de différence significative entre les effets des différents engrais sur le pH mesuré à l'eau. 
+
+Mais vérifions les conditions de validité de l'ANOVA avant toute interprétation.
+
+### Hypothèses de validité
+
+#### Indépendance des résidus
+
+```{r pHo-residu}
+plot(lm, 1)
+```
+
+=> Okay.
+
+#### Normalité des résidus
+
+```{r pHo-norm}
+plot(lm, 2)
+```
+
+=> Oups !
+
+```{r}
+shapiro_test(dpHeau, data = df)
+```
+
+=> p-value < 0.05 : distribution non normale
+
+#### Homogénéité des variances
+
+```{r pho-homvar}
+plot(lm, 3)
+```
+
+```{r}
+levene_test(residuals(lm) ~ Engrais, data = df)
+```
+
+=> Variances homogènes selon le test de Levene
+
+Analyse alternative (à la non normalité), test non paramétrique de Kruskal-Wallis
+
+```{r}
+lm_kw <- kruskal_test(dpHeau ~ Engrais, data = df)
+lm_kw
+```
+
+=> p-value > 0.05 : Pas de différence significative entre les effets des différentes combinaisons sur la variation du pHeau.
+
+### Comparaisons par paires
+
+Moyennes et écart-types et ajout de la colonne des groupes.
+
+```{r}
+pwc_lm = emmeans(lm, ~ Engrais)
+(cm_moy <- summarySE(df, measurevar = "dpHeau", groupvars = "Engrais") %>% 
+   mutate(groups = cld(pwc_lm, alpha = 0.05, Letters = letters)$.group) %>% 
+   select(Engrais, dpHeau, sd, groups))
+write_csv(cm_moy, "tab/csv_pho.csv")
+```
+
+Sous forme graphique ...
+
+```{r pHo-barplot}
+ggplot(data = cm_moy, mapping = aes(x = Engrais, y = dpHeau)) +
+  geom_bar(stat = "identity", color = "blue", fill = "grey", width = 0.5) +
+  geom_text(aes(label = groups), vjust = -0.5, size = 4) + ylim(0, 1) +
+  xlab("Traitement (combinaison d'engrais)") + ylab("Accroissement du pHeau") + theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+```
+
+
+

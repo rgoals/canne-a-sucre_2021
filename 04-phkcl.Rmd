@@ -1,0 +1,151 @@
+
+# pH KCl
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library("ggpubr")
+library("agricolae")
+library("car")
+library("rstatix")
+library("Rmisc")
+library("emmeans")
+library("multcomp")
+library("tidyverse")
+```
+
+## Les données
+
+```{r}
+df <- read_csv("data/dfasseu.csv")
+df <- df %>%
+  select(Bloc, Traitement, Engrais, dpHkcl) %>% 
+  mutate(id = 1:nrow(.), .before = 1)
+```
+
+```{r}
+Lv = c("700 kg/ha NPK", 
+       "400 kg/ha NPK + 600 kg/ha INT", 
+       "600 kg/ha NPK + 600 kg/ha INT", 
+       "300 kg/ha NPK + 1200 kg/ha INT", 
+       "400 kg/ha NPK + 1200 kg/ha INT", 
+       "600 kg/ha NPK + 1200 kg/ha INT")
+
+df <- df %>% 
+  mutate(Engrais = factor(Engrais, levels = Lv))
+```
+
+
+## Visualisation boxplots
+
+```{r pHk-boxplot}
+bxp <- ggplot(df, aes(x = Engrais, y = dpHkcl)) +
+  geom_boxplot() + ylab("dpHkcl") + theme_bw() +
+  xlab("Traitement (combinaison d'engrais)") + ylab("Accroissement du pHkcl") +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+bxp
+```
+
+
+## Détection des observations aberrantes extrêmes
+
+```{r}
+df_out <- df %>%
+  group_by(Engrais) %>%
+  identify_outliers(dpHkcl)
+df_out
+```
+
+=> ...
+
+```{r}
+#df <- df %>% filter(! id %in% c(...)) 
+#df <- df %>% filter(! id %in% df_out$id)
+```
+
+
+## L'ANOVA
+
+### Le modèle
+
+```{r}
+lm <- glm(dpHkcl ~ Engrais, data = df)
+Anova(lm)
+```
+
+La p-value > 0.05 => pas de différence significative entre les effets des différents engrais sur le pHkcl.
+
+### Hypothèses de validité
+
+#### Indépendance des résidus
+
+```{r pHk-residu}
+plot(lm, 1)
+```
+
+#### Normalité des résidus
+
+```{r pHk-norm}
+plot(lm, 2)
+```
+
+```{r}
+shapiro_test(dpHkcl, data = df)
+```
+
+=> Distribution non normale
+
+#### Homogénéité des variances
+
+```{r pHk-homvar}
+plot(lm, 3)
+```
+
+```{r}
+levene_test(residuals(lm) ~ Engrais, data = df)
+```
+
+
+Test non paramétrique de Kruskal-Wallis
+
+
+```{r}
+lm_kw <- df %>% kruskal_test(dpHkcl ~ Engrais)
+lm_kw
+```
+
+=> p-value > 0.05 : Pas de différence significative entre les effets des différentes combinaisons sur la variation du pHkcl.
+
+
+### Comparaisons par paires
+
+Moyennes et écart-types et ajout de la colonne des groupes.
+
+```{r}
+pwc_lm = emmeans(lm, ~ Engrais)
+(cm_moy <- summarySE(df, measurevar = "dpHkcl", groupvars = "Engrais") %>% 
+   mutate(groups = cld(pwc_lm, alpha = 0.05, Letters = letters)$.group) %>% 
+   select(Engrais, dpHkcl, sd, groups))
+write_csv(cm_moy, "tab/csv_phkcl.csv")
+```
+
+
+Sous forme graphique ...
+
+```{r pHk-barplot}
+ggplot(data = cm_moy, mapping = aes(x = Engrais, y = dpHkcl)) +
+  geom_bar(stat = "identity", color = "blue", fill = "grey", width = 0.5) +
+  geom_text(aes(label = groups), vjust = -0.5, size = 4) +
+  ylim(0, 1.25) +
+  xlab("Engrais") + ylab("Accroissement du pHkcl") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+```
+
+
+
+
+
+
+
+
+
+

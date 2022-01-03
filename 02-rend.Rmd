@@ -1,0 +1,181 @@
+
+# Rendement de canne
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+library("ggpubr")
+library("agricolae")
+library("car")
+library("rstatix")
+library("Rmisc")
+library("emmeans")
+library("multcomp")
+library("tidyverse")
+```
+
+## Les données
+
+```{r}
+df <- read_csv("data/dfasseu.csv")
+```
+
+```{r}
+df <- df %>%
+  select(Bloc, Traitement, Engrais, rdt_tha) %>% 
+  mutate(id = 1:nrow(.), .before = 1)
+```
+
+```{r}
+Lv = c("700 kg/ha NPK", 
+       "400 kg/ha NPK + 600 kg/ha INT", 
+       "600 kg/ha NPK + 600 kg/ha INT", 
+       "300 kg/ha NPK + 1200 kg/ha INT", 
+       "400 kg/ha NPK + 1200 kg/ha INT", 
+       "600 kg/ha NPK + 1200 kg/ha INT")
+
+df <- df %>% 
+  mutate(Engrais = factor(Engrais, levels = Lv))
+```
+
+
+## Visualisation boxplots
+
+```{r rdt-boxplot}
+bxp <- ggplot(df, aes(x = Engrais, y = rdt_tha)) +
+  geom_boxplot() + theme_bw() +
+  xlab("Traitement (combinaison d'engrais)") + ylab("Rendement canne (t/ha)") +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+bxp
+```
+
+
+## Détection des observations aberrantes extrêmes
+
+```{r}
+df_out <- df %>%
+  group_by(Engrais) %>%
+  identify_outliers(rdt_tha)
+df_out
+```
+
+=> Pas exclues
+
+```{r}
+#df <- df %>% filter(!id %in% c(....)) 
+#df <- df %>% filter(! id %in% df_out$id)
+```
+
+
+## L'ANOVA
+
+### Le modèle
+
+```{r}
+lm <- glm(rdt_tha ~ Engrais, data = df)
+Anova(lm)
+```
+
+La p-value < 0.01 => différence très significative entre les effets de certains engrais sur le rendement.
+
+### Hypothèses de validité
+
+#### Indépendance des résidus
+
+```{r rdt-residu}
+plot(lm, 1)
+```
+
+#### Normalité des résidus
+
+```{r rdt-norm}
+plot(lm, 2)
+```
+
+```{r}
+shapiro_test(rdt_tha, data = df)
+```
+
+=> Distribution non normales
+
+#### Homogénéité des variances
+
+```{r rdt-homvar}
+plot(lm, 3)
+```
+
+```{r}
+levene_test(residuals(lm) ~ Engrais, data = df)
+```
+
+Mais, alternative Kruskal-Wallis
+
+```{r}
+lm_kw <- df %>% kruskal_test(rdt_tha ~ Engrais)
+lm_kw
+```
+
+=> Différence très significative entre les effets de certains engrais sur le rendement
+
+### Comparaisons par paires, test de Dunn
+
+```{r}
+dpwc <- df %>% 
+  dunn_test(rdt_tha ~ Engrais, p.adjust.method = "bonferroni")
+dpwc %>% select(group1, group2, p.adj.signif)
+```
+
+
+```{r}
+dpwc %>% 
+  select(group1, group2, p, p.adj, p.adj.signif) %>% 
+  filter(p.adj.signif != "ns")
+```
+
+=> Les contrastes significativement différents 
+
+
+```{r}
+pwc <- dpwc %>% add_xy_position(x = "Engrais")
+
+ggboxplot(df, x = "Engrais", y = "rdt_tha") +
+  stat_pvalue_manual(pwc, hide.ns = TRUE) +
+  labs(
+    subtitle = get_test_label(lm_kw, detailed = TRUE),
+    caption = get_pwc_label(pwc)
+  ) +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+```
+
+
+Moyennes et écart-types et ajout de la colonne des groupes (manuellement).
+
+```{r}
+(cm_moy <- summarySE(df, measurevar = "rdt_tha", groupvars = "Engrais") %>% 
+   mutate(groups = c("a", "b", "ab", "b", "ab", "a")))
+write_csv(cm_moy, "tab/csv_rdt.csv")
+```
+
+```{r}
+#cm_moy %>% data.table::setorder(-rdt_tha)
+```
+
+Sous forme graphique ...
+
+```{r rdt-barplot}
+ggplot(data = cm_moy, mapping = aes(x = Engrais, y = rdt_tha)) +
+  geom_bar(stat = "identity", color = "blue", fill = "grey", width = 0.5) +
+  geom_text(aes(label = groups), vjust = -0.5, size = 4) + ylim(0, 120) +
+  xlab("Engrais") + ylab("Rendement canne t/ha") + theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, color = "black", vjust = 1, hjust = 1))
+```
+
+
+
+
+
+
+
+
+
+
+
+
